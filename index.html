@@ -21,69 +21,113 @@
     }
     #status.found { background: rgba(20, 140, 60, 0.8); }
   </style>
+
+  <script>
+    // Modeli ölçüsündən asılı olmayaraq səliqəli yerləşdirir:
+    // üfüqi ölçüsünü `size`-a gətirir, mərkəzə çəkir və altını yerə (y = ground) oturdur.
+    AFRAME.registerComponent('fit-model', {
+      schema: {
+        size: { type: 'number', default: 0.75 },
+        ground: { type: 'number', default: 0 },
+        remove: { type: 'array', default: [] }  // modeldən silinəcək node adları
+      },
+      init() {
+        this.el.addEventListener('model-loaded', () => this.fit());
+      },
+      fit() {
+        const obj = this.el.getObject3D('mesh');
+        if (!obj) return;
+        this.data.remove.forEach((name) => {
+          const node = obj.getObjectByName(name);
+          if (node) node.removeFromParent();
+        });
+
+        // Ölçünü valideyn transformasiyası olmadan hesablamaq üçün müvəqqəti ayırırıq
+        const parent = obj.parent;
+        parent.remove(obj);
+        obj.position.set(0, 0, 0);
+        obj.scale.set(1, 1, 1);
+        obj.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(obj);
+        parent.add(obj);
+
+        const dims = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const s = this.data.size / Math.max(dims.x, dims.z);
+        obj.scale.setScalar(s);
+        obj.position.set(-center.x * s, this.data.ground - box.min.y * s, -center.z * s);
+      }
+    });
+  </script>
 </head>
 <body>
-  <div id="status">Kameranı hədəf şəklə tut...</div>
+  <div id="status">3D model yüklənir...</div>
 
   <!-- imageTargetSrc: tanınacaq şəklin .mind faylı (öz şəkliniz) -->
   <a-scene
     mindar-image="imageTargetSrc: ./targets.mind; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001"
     color-space="sRGB"
-    renderer="colorManagement: true, physicallyCorrectLights"
+    renderer="colorManagement: true"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
-    <a-assets>
-      <a-asset-item id="model"
-        src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf">
-      </a-asset-item>
+    <a-assets timeout="30000">
+      <!-- Toy Car: Khronos glTF Sample Assets, Guido Odendahl, CC0 -->
+      <a-asset-item id="car" src="./models/car.glb"></a-asset-item>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <a-light type="ambient" intensity="0.8"></a-light>
-    <a-light type="directional" position="1 2 2" intensity="1"></a-light>
+    <a-light type="hemisphere" color="#ffffff" ground-color="#667788" intensity="1.2"></a-light>
+    <a-light type="directional" position="0.5 1 2" intensity="1.5"></a-light>
 
-    <!-- targetIndex: 0 → .mind faylındakı birinci şəkil -->
+    <!-- targetIndex: 0 → .mind faylındakı birinci şəkil (şəklin eni = 1 vahid) -->
     <a-entity id="target" mindar-image-target="targetIndex: 0">
 
-      <!-- 3D model (GLTF) -->
-      <a-gltf-model
-        src="#model"
-        position="0 -0.25 0.1"
-        rotation="0 0 0"
-        scale="0.05 0.05 0.05"
-        animation="property: position; to: 0 -0.15 0.1; dir: alternate; loop: true; dur: 1500; easing: easeInOutSine">
-      </a-gltf-model>
+      <!-- stage: Y oxu şəkildən kameraya doğru baxır, yəni fiqurlar şəklin üstündə "dayanır" -->
+      <a-entity id="stage" rotation="90 0 0" scale="0.01 0.01 0.01"
+        animation__pop="property: scale; from: 0.01 0.01 0.01; to: 1 1 1; dur: 700; easing: easeOutBack; startEvents: pop">
 
-      <!-- Sadə 3D fiqurlar (model yüklənməsə də görünür) -->
-      <a-box
-        position="-0.35 0 0.15" width="0.2" height="0.2" depth="0.2" color="#4CC3D9"
-        animation="property: rotation; to: 360 360 0; loop: true; dur: 4000; easing: linear">
-      </a-box>
-      <a-sphere
-        position="0.35 0 0.15" radius="0.12" color="#EF2D5E"
-        animation="property: position; to: 0.35 0.2 0.15; dir: alternate; loop: true; dur: 1000; easing: easeInOutQuad">
-      </a-sphere>
-      <a-torus-knot
-        position="0 0.35 0.15" radius="0.1" radius-tubular="0.02" color="#FFC65D"
-        animation="property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear">
-      </a-torus-knot>
+        <!-- Platforma -->
+        <a-cylinder position="0 0.01 0" radius="0.45" height="0.02" segments-radial="64"
+          material="color: #1d1f24; metalness: 0.6; roughness: 0.3; opacity: 0.9">
+        </a-cylinder>
+        <a-ring position="0 0.021 0" rotation="-90 0 0" radius-inner="0.43" radius-outer="0.45"
+          segments-theta="64" material="color: #4cc3d9; shader: flat">
+        </a-ring>
+
+        <!-- Fırlanan maşın -->
+        <a-entity animation="property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 12000; easing: linear">
+          <a-gltf-model id="carModel" src="#car" fit-model="size: 0.75; ground: 0.02; remove: Fabric"></a-gltf-model>
+        </a-entity>
+
+        <!-- Yazı (platformanın önündə, şəklin üzərində uzanır) -->
+        <a-text value="TOY CAR" align="center" color="#ffffff" width="1.6"
+          position="0 0.025 0.55" rotation="-90 0 0">
+        </a-text>
+      </a-entity>
     </a-entity>
   </a-scene>
 
   <script>
     const status = document.getElementById('status');
     const target = document.getElementById('target');
+    const stage = document.getElementById('stage');
     const scene = document.querySelector('a-scene');
+    const SCAN_TEXT = 'Kameranı hədəf şəklə tut...';
 
+    document.getElementById('carModel').addEventListener('model-loaded', () => {
+      if (!status.classList.contains('found')) status.textContent = SCAN_TEXT;
+    });
     target.addEventListener('targetFound', () => {
       status.textContent = 'Hədəf tapıldı!';
       status.classList.add('found');
+      stage.emit('pop');
     });
     target.addEventListener('targetLost', () => {
-      status.textContent = 'Kameranı hədəf şəklə tut...';
+      status.textContent = SCAN_TEXT;
       status.classList.remove('found');
+      stage.setAttribute('scale', '0.01 0.01 0.01');
     });
     scene.addEventListener('arError', () => {
       status.textContent = 'Kamera açılmadı. HTTPS və kamera icazəsini yoxlayın.';

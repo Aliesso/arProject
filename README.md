@@ -44,12 +44,12 @@ Yaxşı hədəf şəkli üçün: çoxlu detal, kontrast, təkrarlanmayan naxış
 1. `.glb` və ya `.gltf` modeli (məs. [Sketchfab](https://sketchfab.com)-dan) `models/` qovluğuna qoyun.
 2. `index.html`-də:
    ```html
-   <a-asset-item id="model" src="./models/model.glb"></a-asset-item>
+   <a-asset-item id="car" src="./models/model.glb"></a-asset-item>
    ```
-3. Model çox böyük/kiçik görünürsə, `<a-gltf-model>`-in `scale` və `position` dəyərlərini dəyişin.
-   (Hədəf şəklinin eni = 1 vahid.)
+3. Ölçü və mərkəzləmə avtomatikdir: `fit-model="size: 0.75"` modeli şəklin eninin 75%-nə gətirir
+   (hədəf şəklinin eni = 1 vahid). `remove: Fabric` hissəsini yeni model üçün silin.
 
-Sadə fiqurları (`a-box`, `a-sphere`, `a-torus-knot`) lazım deyilsə silə bilərsiniz.
+Hazırkı model: [Toy Car](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ToyCar), Guido Odendahl, CC0 (pulsuz).
 
 ## 5. Bir neçə şəkil, fərqli fiqurlar
 
