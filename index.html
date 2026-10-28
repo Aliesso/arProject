@@ -2,7 +2,7 @@
 <html lang="az">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>AR Layihə</title>
 
   <!-- A-Frame və MindAR (şəkil izləmə) -->
@@ -20,6 +20,36 @@
       pointer-events: none;
     }
     #status.found { background: rgba(20, 140, 60, 0.8); }
+
+    /* İdarəetmə düymələri */
+    #controls {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+      display: flex; justify-content: space-between; align-items: flex-end;
+      padding: 0 20px calc(24px + env(safe-area-inset-bottom));
+      pointer-events: none;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    #controls.visible { opacity: 1; }
+    #controls.visible .ctrl { pointer-events: auto; }
+    .pad { display: flex; gap: 14px; }
+    .pad.vertical { flex-direction: column; }
+    .ctrl {
+      width: 72px; height: 72px; border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.7);
+      background: rgba(20, 22, 28, 0.55); color: #fff;
+      display: grid; place-items: center; padding: 0;
+      touch-action: none; user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+      backdrop-filter: blur(4px);
+      transition: transform 0.08s, background 0.08s;
+    }
+    .ctrl svg { width: 32px; height: 32px; pointer-events: none; }
+    .ctrl.pressed { background: rgba(76, 195, 217, 0.85); transform: scale(0.92); }
+    #btnReset {
+      position: fixed; top: 64px; right: 16px; z-index: 10;
+      width: 48px; height: 48px;
+    }
+    #btnReset svg { width: 24px; height: 24px; }
   </style>
 
   <script>
@@ -58,6 +88,67 @@
         obj.position.set(-center.x * s, this.data.ground - box.min.y * s, -center.z * s);
       }
     });
+
+    // Düymələrin vəziyyəti (düymə basılı saxlanılanda true)
+    const input = { up: false, down: false, left: false, right: false };
+
+    // Sadə maşın hərəkəti: sürətlənmə, sürtünmə, yalnız hərəkətdə dönmə.
+    AFRAME.registerComponent('car-drive', {
+      schema: {
+        maxSpeed: { type: 'number', default: 0.6 },   // vahid/san (şəklin eni = 1)
+        reverseSpeed: { type: 'number', default: 0.3 },
+        accel: { type: 'number', default: 0.9 },
+        brake: { type: 'number', default: 1.8 },
+        friction: { type: 'number', default: 0.6 },
+        turnRate: { type: 'number', default: 2.6 },   // rad/san (tam sürətdə)
+        bounds: { type: 'number', default: 0.55 },    // platformanın daxilində hərəkət radiusu
+        forward: { type: 'number', default: 1 }       // maşın tərs gedirsə -1 edin
+      },
+      init() {
+        this.speed = 0;
+        this.heading = 0;
+        this.active = false;
+      },
+      reset() {
+        this.speed = 0;
+        this.heading = 0;
+        this.el.object3D.position.set(0, 0, 0);
+        this.el.object3D.rotation.set(0, 0, 0);
+      },
+      tick(time, delta) {
+        if (!this.active) return;
+        const d = this.data;
+        const dt = Math.min(delta / 1000, 0.05);
+
+        if (input.up) {
+          this.speed += (this.speed < 0 ? d.brake : d.accel) * dt;
+        } else if (input.down) {
+          this.speed -= (this.speed > 0 ? d.brake : d.accel) * dt;
+        } else {
+          const f = d.friction * dt;
+          this.speed = Math.abs(this.speed) <= f ? 0 : this.speed - Math.sign(this.speed) * f;
+        }
+        this.speed = THREE.MathUtils.clamp(this.speed, -d.reverseSpeed, d.maxSpeed);
+
+        // Dönmə sürətlə mütənasibdir, geri gedəndə istiqamət öz-özünə tərsinə çevrilir
+        const steer = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+        this.heading += steer * d.turnRate * (this.speed / d.maxSpeed) * dt;
+
+        const pos = this.el.object3D.position;
+        const step = this.speed * d.forward * dt;
+        pos.x += Math.sin(this.heading) * step;
+        pos.z += Math.cos(this.heading) * step;
+
+        // Platformanın kənarına çatanda dayanır
+        const r = Math.hypot(pos.x, pos.z);
+        if (r > d.bounds) {
+          pos.x *= d.bounds / r;
+          pos.z *= d.bounds / r;
+          this.speed *= 0.3;
+        }
+        this.el.object3D.rotation.y = this.heading;
+      }
+    });
   </script>
 </head>
 <body>
@@ -74,7 +165,6 @@
     <a-assets timeout="30000">
       <!-- Toy Car: Khronos glTF Sample Assets, Guido Odendahl, CC0.
            Optimallaşdırılıb: Draco geometriya + WebP teksturalar (5.4 MB → 0.6 MB) -->
-
       <a-asset-item id="car" src="./models/car.glb"></a-asset-item>
     </a-assets>
 
@@ -90,46 +180,114 @@
       <a-entity id="stage" rotation="90 0 0" scale="0.01 0.01 0.01"
         animation__pop="property: scale; from: 0.01 0.01 0.01; to: 1 1 1; dur: 700; easing: easeOutBack; startEvents: pop">
 
-        <!-- Platforma -->
-        <a-cylinder position="0 0.01 0" radius="0.45" height="0.02" segments-radial="64"
+        <!-- Platforma (sürmə meydançası) -->
+        <a-cylinder position="0 0.01 0" radius="0.7" height="0.02" segments-radial="64"
           material="color: #1d1f24; metalness: 0.6; roughness: 0.3; opacity: 0.9">
         </a-cylinder>
-        <a-ring position="0 0.021 0" rotation="-90 0 0" radius-inner="0.43" radius-outer="0.45"
+        <a-ring position="0 0.021 0" rotation="-90 0 0" radius-inner="0.675" radius-outer="0.7"
           segments-theta="64" material="color: #4cc3d9; shader: flat">
         </a-ring>
+        <a-ring position="0 0.021 0" rotation="-90 0 0" radius-inner="0.06" radius-outer="0.075"
+          segments-theta="48" material="color: #ffffff; shader: flat; opacity: 0.35">
+        </a-ring>
 
-        <!-- Fırlanan maşın -->
-        <a-entity animation="property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 12000; easing: linear">
-          <a-gltf-model id="carModel" src="#car" fit-model="size: 0.75; ground: 0.02"></a-gltf-model>
+        <!-- İdarə olunan maşın -->
+        <a-entity id="car" car-drive>
+          <a-gltf-model id="carModel" src="#car" fit-model="size: 0.3; ground: 0.02"></a-gltf-model>
         </a-entity>
-
-        <!-- Yazı (platformanın önündə, şəklin üzərində uzanır) -->
-        <a-text value="TOY CAR" align="center" color="#ffffff" width="1.6"
-          position="0 0.025 0.55" rotation="-90 0 0">
-        </a-text>
       </a-entity>
     </a-entity>
   </a-scene>
+
+  <!-- İdarəetmə: solda sükan, sağda qaz / geri -->
+  <button id="btnReset" class="ctrl" aria-label="Mərkəzə qaytar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>
+    </svg>
+  </button>
+  <div id="controls">
+    <div class="pad">
+      <button class="ctrl" data-key="left" aria-label="Sola">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button class="ctrl" data-key="right" aria-label="Sağa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+    <div class="pad vertical">
+      <button class="ctrl" data-key="up" aria-label="İrəli">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg>
+      </button>
+      <button class="ctrl" data-key="down" aria-label="Geri">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>
+      </button>
+    </div>
+  </div>
 
   <script>
     const status = document.getElementById('status');
     const target = document.getElementById('target');
     const stage = document.getElementById('stage');
+    const car = document.getElementById('car');
+    const controls = document.getElementById('controls');
+    const btnReset = document.getElementById('btnReset');
     const scene = document.querySelector('a-scene');
     const SCAN_TEXT = 'Kameranı hədəf şəklə tut...';
+
+    function setActive(on) {
+      car.components['car-drive'].active = on;
+      controls.classList.toggle('visible', on);
+      btnReset.style.display = on ? '' : 'none';
+      if (!on) {
+        Object.keys(input).forEach((k) => (input[k] = false));
+        document.querySelectorAll('.ctrl.pressed').forEach((b) => b.classList.remove('pressed'));
+      }
+    }
+    btnReset.style.display = 'none';
+
+    // Düymələr: basılı saxlayanda işləyir, bir neçə barmaqla eyni anda basmaq olar
+    document.querySelectorAll('[data-key]').forEach((btn) => {
+      const key = btn.dataset.key;
+      const press = (e) => {
+        e.preventDefault();
+        btn.setPointerCapture(e.pointerId);
+        input[key] = true;
+        btn.classList.add('pressed');
+      };
+      const release = () => {
+        input[key] = false;
+        btn.classList.remove('pressed');
+      };
+      btn.addEventListener('pointerdown', press);
+      btn.addEventListener('pointerup', release);
+      btn.addEventListener('pointercancel', release);
+      btn.addEventListener('lostpointercapture', release);
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    });
+    btnReset.addEventListener('click', () => car.components['car-drive'].reset());
+
+    // Kompüterdə klaviatura: oxlar və ya WASD
+    const KEYS = {
+      ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down',
+      ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right'
+    };
+    window.addEventListener('keydown', (e) => { if (KEYS[e.code]) { input[KEYS[e.code]] = true; e.preventDefault(); } });
+    window.addEventListener('keyup', (e) => { if (KEYS[e.code]) input[KEYS[e.code]] = false; });
 
     document.getElementById('carModel').addEventListener('model-loaded', () => {
       if (!status.classList.contains('found')) status.textContent = SCAN_TEXT;
     });
     target.addEventListener('targetFound', () => {
-      status.textContent = 'Hədəf tapıldı!';
+      status.textContent = 'Hədəf tapıldı! Maşını idarə et';
       status.classList.add('found');
       stage.emit('pop');
+      setActive(true);
     });
     target.addEventListener('targetLost', () => {
       status.textContent = SCAN_TEXT;
       status.classList.remove('found');
       stage.setAttribute('scale', '0.01 0.01 0.01');
+      setActive(false);
     });
     scene.addEventListener('arError', () => {
       status.textContent = 'Kamera açılmadı. HTTPS və kamera icazəsini yoxlayın.';
