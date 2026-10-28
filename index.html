@@ -139,12 +139,12 @@
         pos.x += Math.sin(this.heading) * step;
         pos.z += Math.cos(this.heading) * step;
 
-        // Platformanın kənarına çatanda dayanır
+        // Kənardan çıxa bilmir, sərhəd boyunca sürüşür (dönmək üçün sürət saxlanılır)
         const r = Math.hypot(pos.x, pos.z);
         if (r > d.bounds) {
           pos.x *= d.bounds / r;
           pos.z *= d.bounds / r;
-          this.speed *= 0.3;
+          this.speed *= 0.97;
         }
         this.el.object3D.rotation.y = this.heading;
       }
@@ -165,7 +165,7 @@
     <a-assets timeout="30000">
       <!-- Toy Car: Khronos glTF Sample Assets, Guido Odendahl, CC0.
            Optimallaşdırılıb: Draco geometriya + WebP teksturalar (5.4 MB → 0.6 MB) -->
-      <a-asset-item id="car" src="./models/car.glb"></a-asset-item>
+      <a-asset-item id="carAsset" src="./models/car.glb"></a-asset-item>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -180,20 +180,14 @@
       <a-entity id="stage" rotation="90 0 0" scale="0.01 0.01 0.01"
         animation__pop="property: scale; from: 0.01 0.01 0.01; to: 1 1 1; dur: 700; easing: easeOutBack; startEvents: pop">
 
-        <!-- Platforma (sürmə meydançası) -->
-        <a-cylinder position="0 0.01 0" radius="0.7" height="0.02" segments-radial="64"
-          material="color: #1d1f24; metalness: 0.6; roughness: 0.3; opacity: 0.9">
-        </a-cylinder>
-        <a-ring position="0 0.021 0" rotation="-90 0 0" radius-inner="0.675" radius-outer="0.7"
-          segments-theta="64" material="color: #4cc3d9; shader: flat">
-        </a-ring>
-        <a-ring position="0 0.021 0" rotation="-90 0 0" radius-inner="0.06" radius-outer="0.075"
-          segments-theta="48" material="color: #ffffff; shader: flat; opacity: 0.35">
+        <!-- Sürmə meydançasının sərhədi (şəffaf, şəkli örtmür) -->
+        <a-ring position="0 0.005 0" rotation="-90 0 0" radius-inner="0.68" radius-outer="0.7"
+          segments-theta="64" material="color: #4cc3d9; shader: flat; opacity: 0.8">
         </a-ring>
 
         <!-- İdarə olunan maşın -->
         <a-entity id="car" car-drive>
-          <a-gltf-model id="carModel" src="#car" fit-model="size: 0.3; ground: 0.02"></a-gltf-model>
+          <a-gltf-model id="carModel" src="#carAsset"fit-model="size: 0.3; ground: 0"></a-gltf-model>
         </a-entity>
       </a-entity>
     </a-entity>
@@ -234,14 +228,15 @@
     const scene = document.querySelector('a-scene');
     const SCAN_TEXT = 'Kameranı hədəf şəklə tut...';
 
-    function setActive(on) {
-      car.components['car-drive'].active = on;
-      controls.classList.toggle('visible', on);
-      btnReset.style.display = on ? '' : 'none';
-      if (!on) {
-        Object.keys(input).forEach((k) => (input[k] = false));
-        document.querySelectorAll('.ctrl.pressed').forEach((b) => b.classList.remove('pressed'));
-      }
+    // Düymələr ilk tapılmadan sonra həmişə görünür: telefonda izləmə tez-tez bir anlıq
+    // itir, hər dəfə gizlətsək basılı düymələr sıfırlanar və maşını idarə etmək olmaz.
+    let shown = false;
+    function showControls() {
+      if (shown) return;
+      shown = true;
+      controls.classList.add('visible');
+      btnReset.style.display = '';
+      stage.emit('pop');
     }
     btnReset.style.display = 'none';
 
@@ -278,16 +273,16 @@
       if (!status.classList.contains('found')) status.textContent = SCAN_TEXT;
     });
     target.addEventListener('targetFound', () => {
-      status.textContent = 'Hədəf tapıldı! Maşını idarə et';
+      status.textContent = 'Maşını idarə et';
       status.classList.add('found');
-      stage.emit('pop');
-      setActive(true);
+      car.components['car-drive'].active = true;
+      showControls();
     });
     target.addEventListener('targetLost', () => {
       status.textContent = SCAN_TEXT;
       status.classList.remove('found');
-      stage.setAttribute('scale', '0.01 0.01 0.01');
-      setActive(false);
+      // Maşın görünmürkən hərəkət etməsin, amma düymələrin vəziyyəti saxlanılır
+      car.components['car-drive'].active = false;
     });
     scene.addEventListener('arError', () => {
       status.textContent = 'Kamera açılmadı. HTTPS və kamera icazəsini yoxlayın.';
