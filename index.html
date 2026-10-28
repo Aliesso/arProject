@@ -72,7 +72,9 @@
     device-orientation-permission-ui="enabled: false">
 
     <a-assets timeout="30000">
-      <!-- Toy Car: Khronos glTF Sample Assets, Guido Odendahl, CC0 -->
+      <!-- Toy Car: Khronos glTF Sample Assets, Guido Odendahl, CC0.
+           Optimallaşdırılıb: Draco geometriya + WebP teksturalar (5.4 MB → 0.6 MB) -->
+
       <a-asset-item id="car" src="./models/car.glb"></a-asset-item>
     </a-assets>
 
@@ -98,7 +100,7 @@
 
         <!-- Fırlanan maşın -->
         <a-entity animation="property: rotation; from: 0 0 0; to: 0 360 0; loop: true; dur: 12000; easing: linear">
-          <a-gltf-model id="carModel" src="#car" fit-model="size: 0.75; ground: 0.02; remove: Fabric"></a-gltf-model>
+          <a-gltf-model id="carModel" src="#car" fit-model="size: 0.75; ground: 0.02"></a-gltf-model>
         </a-entity>
 
         <!-- Yazı (platformanın önündə, şəklin üzərində uzanır) -->

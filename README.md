@@ -47,7 +47,11 @@ Yaxşı hədəf şəkli üçün: çoxlu detal, kontrast, təkrarlanmayan naxış
    <a-asset-item id="car" src="./models/model.glb"></a-asset-item>
    ```
 3. Ölçü və mərkəzləmə avtomatikdir: `fit-model="size: 0.75"` modeli şəklin eninin 75%-nə gətirir
-   (hədəf şəklinin eni = 1 vahid). `remove: Fabric` hissəsini yeni model üçün silin.
+   (hədəf şəklinin eni = 1 vahid). Modeldən hansısa hissəni gizlətmək üçün: `remove: HissəninAdı`.
+4. Sürətli yüklənmə üçün modeli sıxın (Draco + WebP):
+   ```bash
+   npx @gltf-transform/cli optimize model.glb model-opt.glb --compress draco --texture-compress webp --texture-size 1024
+   ```
 
 Hazırkı model: [Toy Car](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/ToyCar), Guido Odendahl, CC0 (pulsuz).
 
